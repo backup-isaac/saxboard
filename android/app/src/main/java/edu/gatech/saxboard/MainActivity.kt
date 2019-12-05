@@ -36,8 +36,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun readCallback(bytes: ByteArray, length: Int) {
-        receivedChars.text = receivedChars.text.substring(length) + "\n" + bytes.toString(Charsets.US_ASCII)
+    fun readCallback(data: String) {
+        receivedChars.text = receivedChars.text.toString() + data
     }
 
     private lateinit var receivedChars: TextView
@@ -65,6 +65,15 @@ class MainActivity : AppCompatActivity() {
             connectThread = ConnectThread(skateboard!!)
             connectButton.isEnabled = false
             connectThread!!.start()
+        }
+        val disconnectButton = findViewById<Button>(R.id.disconnectButton)
+        disconnectButton.setOnClickListener {
+            if (skateboard == null) {
+                Log.d(TAG, "skateboard not exist")
+                return@setOnClickListener
+            }
+            connectThread!!.cancel()
+            connectButton.isEnabled = true
         }
         val sendButton = findViewById<Button>(R.id.writeButton)
         val sendText = findViewById<EditText>(R.id.charsToSend)
@@ -110,13 +119,13 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         const val REQUEST_ENABLE_BT = 1
-        const val SKATEBOARD_NAME = "spaghet"
+        const val SKATEBOARD_NAME = "ESP32test"
         const val TAG = "saxboardLogging"
     }
 
     inner class ConnectThread(device: BluetoothDevice) : Thread() {
 
-        private val readBuffer = ByteArray(1024)
+        private val readBuffer = ByteArray(256)
 
         private val socket: BluetoothSocket? by lazy(LazyThreadSafetyMode.NONE) {
             device.createRfcommSocketToServiceRecord(device.uuids[0].uuid)
@@ -129,6 +138,7 @@ class MainActivity : AppCompatActivity() {
                 socket.connect()
                 outStream = socket.outputStream
                 var numBytes: Int
+                Log.d(TAG, "Connected")
                 while (true) {
                     numBytes = try {
                         socket.inputStream.read(readBuffer)
@@ -136,8 +146,14 @@ class MainActivity : AppCompatActivity() {
                         Log.d(TAG, "Input stream was disconnected", e)
                         break
                     }
+                    Log.d(TAG, "Read into buffer $numBytes bytes")
+                    val str = ByteArray(numBytes)
+                    for (i in 0 until numBytes) {
+                        str[i] = readBuffer[i]
+                    }
+                    val strToFeed = str.toString(Charsets.US_ASCII)
                     runOnUiThread {
-                        readCallback(readBuffer, numBytes)
+                        readCallback(strToFeed)
                     }
                 }
             }
