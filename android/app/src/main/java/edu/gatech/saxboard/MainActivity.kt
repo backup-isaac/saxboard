@@ -136,7 +136,9 @@ class MainActivity : AppCompatActivity() {
                         Log.d(TAG, "Input stream was disconnected", e)
                         break
                     }
-                    readCallback(readBuffer, numBytes)
+                    runOnUiThread {
+                        readCallback(readBuffer, numBytes)
+                    }
                 }
             }
         }
