@@ -16,6 +16,7 @@ import android.widget.EditText
 import android.widget.TextView
 import java.io.IOException
 import java.io.OutputStream
+import java.nio.ByteBuffer
 
 class MainActivity : AppCompatActivity() {
     private var bluetoothAdapter: BluetoothAdapter? = null
@@ -36,8 +37,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun readCallback(data: String) {
-        receivedChars.text = receivedChars.text.toString() + data
+    fun imuCallback(data: ImuPacket) {
+        receivedChars.text = receivedChars.text.toString() + "IMU x: ${data.first}, y: ${data.second}, z: ${data.third}\n"
     }
 
     private lateinit var receivedChars: TextView
@@ -121,6 +122,9 @@ class MainActivity : AppCompatActivity() {
         const val REQUEST_ENABLE_BT = 1
         const val SKATEBOARD_NAME = "ESP32test"
         const val TAG = "saxboardLogging"
+        val PACKET_LENGTHS = mapOf(
+            "IMU" to 12
+        )
     }
 
     inner class ConnectThread(device: BluetoothDevice) : Thread() {
@@ -139,6 +143,13 @@ class MainActivity : AppCompatActivity() {
                 outStream = socket.outputStream
                 var numBytes: Int
                 Log.d(TAG, "Connected")
+
+                var parserState = ParserState.Waiting
+                val packetBuffer = ByteArray(32)
+                var packetBufferIdx = 0
+                var packetId = ""
+                var packetLength: Int? = null
+                var packetReady = false
                 while (true) {
                     numBytes = try {
                         socket.inputStream.read(readBuffer)
@@ -146,14 +157,54 @@ class MainActivity : AppCompatActivity() {
                         Log.d(TAG, "Input stream was disconnected", e)
                         break
                     }
-                    Log.d(TAG, "Read into buffer $numBytes bytes")
-                    val str = ByteArray(numBytes)
+                    Log.d(TAG, "Received $numBytes bytes")
                     for (i in 0 until numBytes) {
-                        str[i] = readBuffer[i]
+                        if (parserState == ParserState.Waiting) {
+                            if (readBuffer[i] == '!'.toByte()) {
+                                parserState = ParserState.PacketBegun
+                                packetId = ""
+                                Log.d(TAG, "Began packet")
+                            } else {
+                                Log.w(TAG, "Malformed packet, '!' expected but ${readBuffer[i]} present")
+                                break
+                            }
+                        } else if (parserState == ParserState.PacketBegun) {
+                            packetId += readBuffer[i].toChar()
+                            Log.d(TAG, "Packet ID $packetId")
+                            if (packetId.length == 3) {
+                                packetLength = PACKET_LENGTHS[packetId]
+                                if (packetLength == null) {
+                                    Log.w(TAG, "Unrecognized packet type $packetId")
+                                    parserState = ParserState.Waiting
+                                    break
+                                }
+                                parserState = ParserState.IdReceived
+                                packetBufferIdx = 0
+                            }
+                        } else if (parserState == ParserState.IdReceived) {
+                            packetBuffer[packetBufferIdx++] = readBuffer[i]
+                            if (packetBufferIdx >= packetLength!!) {
+                                packetReady = true
+                                parserState = ParserState.Waiting
+                                break
+                            }
+                            if (packetBufferIdx >= 32) {
+                                Log.w(TAG, "Invalid packet length $packetLength")
+                                parserState = ParserState.Waiting
+                                break
+                            }
+                        }
                     }
-                    val strToFeed = str.toString(Charsets.US_ASCII)
-                    runOnUiThread {
-                        readCallback(strToFeed)
+                    if (packetReady) {
+                        packetReady = false
+                        when (packetId) {
+                            "IMU" -> {
+                                val imuPacket = parseImuPacket(packetBuffer)
+                                runOnUiThread {
+                                    imuCallback(imuPacket)
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -179,4 +230,29 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+    enum class ParserState {
+        Waiting,
+        PacketBegun,
+        IdReceived,
+    }
+
+    fun parseImuPacket(packetBuffer: ByteArray) : ImuPacket {
+        // flip byte endianness from what the esp32 sent
+        for (i in 0 until packetBuffer.lastIndex step 4) {
+            var temp = packetBuffer[i]
+            packetBuffer[i] = packetBuffer[i+3]
+            packetBuffer[i+3] = temp
+            temp = packetBuffer[i+1]
+            packetBuffer[i+1] = packetBuffer[i+2]
+            packetBuffer[i+2] = temp
+        }
+        val wbuf = ByteBuffer.wrap(packetBuffer)
+        return ImuPacket(
+            wbuf.getFloat(0),
+            wbuf.getFloat(4),
+            wbuf.getFloat(8)
+        )
+    }
 }
+
+typealias ImuPacket = Triple<Float, Float, Float>
