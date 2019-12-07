@@ -27,6 +27,54 @@ class MainActivity : AppCompatActivity() {
     private var bluetoothAdapter: BluetoothAdapter? = null
     private var skateboard: BluetoothDevice? = null
     private var connectThread: ConnectThread? = null
+    private lateinit var connectButton: Button
+
+    private var disconnectedCallbacks = arrayListOf<() -> Unit>()
+
+    private fun connectedCallback() {
+        connectButton.isEnabled = false
+        sendCommand("DIR", ByteArray(0))
+    }
+
+    private fun disconnectedCallback() {
+        connectButton.isEnabled = true
+        for (callback in disconnectedCallbacks) {
+            callback()
+        }
+    }
+
+    fun registerDisconnectedCallback(callback: () -> Unit) {
+        disconnectedCallbacks.add(callback)
+    }
+
+    fun unregisterDisconnectedCallback(callback: () -> Unit) {
+        disconnectedCallbacks.remove(callback)
+    }
+
+    private var audioFileCallback: (String) -> Unit = {}
+
+    fun registerAudioFileCallback(callback: (String) -> Unit) {
+        audioFileCallback = callback
+    }
+
+    fun unregisterAudioFileCallback() {
+        audioFileCallback = {}
+    }
+
+    fun sendCommand(command: String, data: ByteArray): Boolean {
+        if (connectThread == null) {
+            Log.d(TAG, "connection not exist")
+            return false
+        }
+        if (command.length != 3) {
+            Log.w(TAG, "Invalid command $command")
+            return false
+        }
+        if (!connectThread!!.write("!$command".toByteArray(Charsets.US_ASCII))) {
+            return false
+        }
+        return connectThread!!.write(data)
+    }
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -43,10 +91,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun imuCallback(data: ImuPacket) {
-        receivedChars.text = receivedChars.text.toString() + "IMU x: ${data.first}, y: ${data.second}, z: ${data.third}\n"
+//        receivedChars.text = receivedChars.text.toString() + "IMU x: ${data.first}, y: ${data.second}, z: ${data.third}\n"
     }
-
-    private lateinit var receivedChars: TextView
 
     private lateinit var viewPagerAdapter: ViewPagerAdapter
     private lateinit var viewPager: ViewPager
@@ -71,14 +117,13 @@ class MainActivity : AppCompatActivity() {
                 Log.d(TAG, "skateboard already exists")
             }
         }
-        val connectButton = findViewById<Button>(R.id.connectButton)
+        connectButton = findViewById(R.id.connectButton)
         connectButton.setOnClickListener {
             if (skateboard == null) {
                 Log.d(TAG, "skateboard not exist")
                 return@setOnClickListener
             }
             connectThread = ConnectThread(skateboard!!)
-            connectButton.isEnabled = false
             connectThread!!.start()
         }
         val disconnectButton = findViewById<Button>(R.id.disconnectButton)
@@ -89,23 +134,7 @@ class MainActivity : AppCompatActivity() {
             }
             connectThread!!.cancel()
             connectButton.isEnabled = true
-        }
-        val sendButton = findViewById<Button>(R.id.writeButton)
-        val sendText = findViewById<EditText>(R.id.charsToSend)
-        sendButton.setOnClickListener {
-            if (connectThread == null) {
-                Log.d(TAG, "not connected")
-                return@setOnClickListener
-            }
-            val err = connectThread!!.write(sendText.text.toString().toByteArray(Charsets.US_ASCII))
-            if (err) {
-                Log.d(TAG, "write failed")
-            }
-        }
-        receivedChars = findViewById(R.id.readCharsView)
-        val clearButton = findViewById<Button>(R.id.clearButton)
-        clearButton.setOnClickListener {
-            receivedChars.text = ""
+            connectThread = null
         }
         bluetoothAdapter = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
         if (bluetoothAdapter == null) {
@@ -137,7 +166,8 @@ class MainActivity : AppCompatActivity() {
         const val SKATEBOARD_NAME = "ESP32test"
         const val TAG = "saxboardLogging"
         val PACKET_LENGTHS = mapOf(
-            "IMU" to 12
+            "IMU" to 12,
+            "AUD" to 32
         )
     }
 
@@ -157,6 +187,9 @@ class MainActivity : AppCompatActivity() {
                 outStream = socket.outputStream
                 var numBytes: Int
                 Log.d(TAG, "Connected")
+                runOnUiThread {
+                    connectedCallback()
+                }
 
                 var parserState = ParserState.Waiting
                 val packetBuffer = ByteArray(32)
@@ -169,6 +202,9 @@ class MainActivity : AppCompatActivity() {
                         socket.inputStream.read(readBuffer)
                     } catch (e: IOException) {
                         Log.d(TAG, "Input stream was disconnected", e)
+                        runOnUiThread {
+                            disconnectedCallback()
+                        }
                         break
                     }
                     Log.d(TAG, "Received $numBytes bytes")
@@ -218,13 +254,19 @@ class MainActivity : AppCompatActivity() {
                                     imuCallback(imuPacket)
                                 }
                             }
+                            "AUD" -> {
+                                val audioFilePacket = parseAudioFilePacket(packetBuffer)
+                                runOnUiThread {
+                                    audioFileCallback(audioFilePacket)
+                                }
+                            }
                         }
                     }
                 }
             }
         }
 
-        // false if success, true if error
+        // true if success, false if error
         fun write(bytes: ByteArray): Boolean {
             return try {
                 outStream?.write(bytes)
@@ -268,6 +310,18 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    fun parseAudioFilePacket(packetBuffer: ByteArray) : String {
+        val sb = StringBuilder()
+        for (i in 0 until packetBuffer.lastIndex) {
+            val ch = packetBuffer[i]
+            if (ch == 0.toByte()) {
+                break
+            }
+            sb.append(ch.toChar())
+        }
+        return sb.toString()
+    }
+
     class ViewPagerAdapter(fm: FragmentManager) : FragmentPagerAdapter(fm, BEHAVIOR_RESUME_ONLY_CURRENT_FRAGMENT) {
         override fun getCount(): Int  = 2
         override fun getItem(i: Int): Fragment {
@@ -280,9 +334,9 @@ class MainActivity : AppCompatActivity() {
 
         override fun getPageTitle(position: Int): CharSequence {
             return if (position == 0) {
-                "CONTROL"
+                "CONTROLS"
             } else {
-                "PLOT"
+                "DATA"
             }
         }
     }
