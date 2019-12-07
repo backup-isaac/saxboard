@@ -14,6 +14,11 @@ import android.util.Log
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentManager
+import androidx.fragment.app.FragmentPagerAdapter
+import androidx.viewpager.widget.ViewPager
+import com.google.android.material.tabs.TabLayout
 import java.io.IOException
 import java.io.OutputStream
 import java.nio.ByteBuffer
@@ -43,9 +48,18 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var receivedChars: TextView
 
+    private lateinit var viewPagerAdapter: ViewPagerAdapter
+    private lateinit var viewPager: ViewPager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        viewPagerAdapter = ViewPagerAdapter(supportFragmentManager)
+        viewPager = findViewById(R.id.viewPager)
+        viewPager.adapter = viewPagerAdapter
+        val tabLayout = findViewById<TabLayout>(R.id.tabLayout)
+        val viewPager = findViewById<ViewPager>(R.id.viewPager)
+        tabLayout.setupWithViewPager(viewPager)
         val searchButton = findViewById<Button>(R.id.searchButton)
         searchButton.setOnClickListener {
             if (bluetoothAdapter == null) {
@@ -253,6 +267,26 @@ class MainActivity : AppCompatActivity() {
             wbuf.getFloat(8)
         )
     }
+
+    class ViewPagerAdapter(fm: FragmentManager) : FragmentPagerAdapter(fm, BEHAVIOR_RESUME_ONLY_CURRENT_FRAGMENT) {
+        override fun getCount(): Int  = 2
+        override fun getItem(i: Int): Fragment {
+            return if (i == 0) {
+                ControlFragment()
+            } else {
+                PlotFragment()
+            }
+        }
+
+        override fun getPageTitle(position: Int): CharSequence {
+            return if (position == 0) {
+                "CONTROL"
+            } else {
+                "PLOT"
+            }
+        }
+    }
+
 }
 
 typealias ImuPacket = Triple<Float, Float, Float>
