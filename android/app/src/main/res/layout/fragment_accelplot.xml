@@ -5,26 +5,25 @@
     android:id="@+id/constraintLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".PlotFragment">
+    tools:context=".AccelPlotFragment">
 
     <com.androidplot.xy.XYPlot
-        style="@style/APDefacto.Dark"
-        android:id="@+id/accelerationPlot"
+        android:id="@+id/plot"
+        style="@style/APDefacto.Light"
         android:layout_width="fill_parent"
         android:layout_height="fill_parent"
-        app:title="A Simple XY Plot"
-        app:rangeTitle="range"
-        app:domainTitle="domain"
-        app:lineLabels="left|bottom"
-        app:lineLabelRotationBottom="-45"
+        android:layout_marginStart="8dp"
         android:layout_marginTop="8dp"
         android:layout_marginEnd="8dp"
-        android:layout_marginStart="8dp"
-        app:layout_constraintTop_toBottomOf="parent"
+        app:domainTitle="Time (s)"
+        app:layout_constraintEnd_toEndOf="parent"
 
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        />
+        app:layout_constraintTop_toTopOf="parent"
+        app:lineLabelRotationBottom="-90"
+        app:rangeTitle="Acceleration (g)"
+        app:title="Acceleration"
+        app:lineLabels="left|bottom"/>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
 

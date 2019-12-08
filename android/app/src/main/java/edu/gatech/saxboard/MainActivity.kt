@@ -61,6 +61,16 @@ class MainActivity : AppCompatActivity() {
         audioFileCallback = {}
     }
 
+    private var imuCallbacks = arrayListOf<(ImuPacket) -> Unit>()
+
+    fun registerImuCallback(callback: (ImuPacket) -> Unit) {
+        imuCallbacks.add(callback)
+    }
+
+    fun unregisterImuCallback(callback: (ImuPacket) -> Unit) {
+        imuCallbacks.remove(callback)
+    }
+
     fun sendCommand(command: String, data: ByteArray): Boolean {
         if (connectThread == null) {
             Log.d(TAG, "connection not exist")
@@ -90,10 +100,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun imuCallback(data: ImuPacket) {
-//        receivedChars.text = receivedChars.text.toString() + "IMU x: ${data.first}, y: ${data.second}, z: ${data.third}\n"
-    }
-
     private lateinit var viewPagerAdapter: ViewPagerAdapter
     private lateinit var viewPager: ViewPager
 
@@ -108,6 +114,7 @@ class MainActivity : AppCompatActivity() {
         tabLayout.setupWithViewPager(viewPager)
         val searchButton = findViewById<Button>(R.id.searchButton)
         searchButton.setOnClickListener {
+//             for (imuCallback in imuCallbacks) imuCallback(ImuPacket(0.01f,-0.02f,0.98f)) // uncomment this for testing plots on emulator
             if (bluetoothAdapter == null) {
                 Log.d(TAG, "bluetooth not exist")
             } else if (skateboard == null) {
@@ -250,8 +257,10 @@ class MainActivity : AppCompatActivity() {
                         when (packetId) {
                             "IMU" -> {
                                 val imuPacket = parseImuPacket(packetBuffer)
-                                runOnUiThread {
-                                    imuCallback(imuPacket)
+                                for (imuCallback in imuCallbacks) {
+                                    runOnUiThread {
+                                        imuCallback(imuPacket)
+                                    }
                                 }
                             }
                             "AUD" -> {
@@ -323,21 +332,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     class ViewPagerAdapter(fm: FragmentManager) : FragmentPagerAdapter(fm, BEHAVIOR_RESUME_ONLY_CURRENT_FRAGMENT) {
-        override fun getCount(): Int  = 2
+        private val fragments = arrayOf(
+            ControlFragment(),
+            AccelPlotFragment(),
+            DistPlotFragment()
+        )
+        private val fragmentTitles = arrayOf(
+            "CONTROLS",
+            "ACCELERATION",
+            "DISTANCE"
+        )
+
+        override fun getCount(): Int = fragments.size
         override fun getItem(i: Int): Fragment {
-            return if (i == 0) {
-                ControlFragment()
-            } else {
-                PlotFragment()
-            }
+            return fragments[i]
         }
 
         override fun getPageTitle(position: Int): CharSequence {
-            return if (position == 0) {
-                "CONTROLS"
-            } else {
-                "DATA"
-            }
+            return fragmentTitles[position]
         }
     }
 

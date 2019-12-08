@@ -6,25 +6,60 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
-import com.androidplot.xy.*
+import com.androidplot.xy.LineAndPointFormatter
+import com.androidplot.xy.SimpleXYSeries
+import com.androidplot.xy.XYPlot
 
 
-class PlotFragment : Fragment() {
+abstract class PlotFragment(private val layoutId: Int) : Fragment() {
+    private lateinit var mainActivity: MainActivity
+    protected lateinit var plot: XYPlot
+    protected lateinit var xSeries: SimpleXYSeries
+    protected lateinit var ySeries: SimpleXYSeries
+    protected lateinit var zSeries: SimpleXYSeries
+    private val resetToDefaults: () -> Unit = {
+        xSeries = SimpleXYSeries(arrayListOf(0), SimpleXYSeries.ArrayFormat.Y_VALS_ONLY, "X")
+        ySeries = SimpleXYSeries(arrayListOf(0), SimpleXYSeries.ArrayFormat.Y_VALS_ONLY, "Y")
+        zSeries = SimpleXYSeries(arrayListOf(0), SimpleXYSeries.ArrayFormat.Y_VALS_ONLY, "Z")
+        first = true
+        i = 0
+    }
+
+    var i = 0
+    var first = true
+    var firstTimestamp: Long = 0
+
+    abstract val imuCallback: (ImuPacket) -> Unit
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        mainActivity = activity as MainActivity
+        mainActivity.registerDisconnectedCallback(resetToDefaults)
+        xSeries = SimpleXYSeries(arrayListOf(0), SimpleXYSeries.ArrayFormat.Y_VALS_ONLY, "X")
+        ySeries = SimpleXYSeries(arrayListOf(0), SimpleXYSeries.ArrayFormat.Y_VALS_ONLY, "Y")
+        zSeries = SimpleXYSeries(arrayListOf(0), SimpleXYSeries.ArrayFormat.Y_VALS_ONLY, "Z")
+        mainActivity.registerImuCallback(imuCallback)
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
         // Inflate the layout for this fragment
-        val view = inflater.inflate(R.layout.fragment_plot, container, false)
-        val plot = view.findViewById<XYPlot>(R.id.accelerationPlot)
-
-        val series1Numbers = listOf(1, 4, 2, 8, 4, 16, 8, 32, 16, 69)
-
-        val series1: XYSeries = SimpleXYSeries(
-            series1Numbers, SimpleXYSeries.ArrayFormat.Y_VALS_ONLY, "Series1"
-        )
-        val series1Format = LineAndPointFormatter(Color.RED, Color.GREEN, Color.BLUE, null)
-        plot.addSeries(series1, series1Format)
+        val view = inflater.inflate(layoutId, container, false)
+        plot = view.findViewById(R.id.plot)
+        val xSeriesFormat = LineAndPointFormatter(Color.RED, Color.RED, Color.alpha(0), null)
+        plot.addSeries(xSeries, xSeriesFormat)
+        val ySeriesFormat = LineAndPointFormatter(Color.GREEN, Color.GREEN, Color.alpha(0), null)
+        plot.addSeries(ySeries, ySeriesFormat)
+        val zSeriesFormat = LineAndPointFormatter(Color.BLUE, Color.BLUE, Color.alpha(0), null)
+        plot.addSeries(zSeries, zSeriesFormat)
         return view
+    }
+
+    override fun onDestroy() {
+        mainActivity.unregisterDisconnectedCallback(resetToDefaults)
+        mainActivity.unregisterImuCallback(imuCallback)
+        super.onDestroy()
     }
 }
