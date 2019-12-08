@@ -364,13 +364,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun parseHallPacket(packetBuffer: ByteArray) : Double {
-        // flip byte endianness from what the esp32 sent
-        var temp = packetBuffer[0]
-        packetBuffer[0] = packetBuffer[1]
-        packetBuffer[1] = temp
-        val wbuf = ByteBuffer.wrap(packetBuffer)
-        val ticks = wbuf.getShort(0)
-        return ticks *  2 * Math.PI * WHEEL_RADIUS
+        return packetBuffer[0] *  2 * Math.PI * WHEEL_RADIUS
     }
 
     class ViewPagerAdapter(fm: FragmentManager) : FragmentPagerAdapter(fm, BEHAVIOR_RESUME_ONLY_CURRENT_FRAGMENT) {
