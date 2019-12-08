@@ -17,7 +17,7 @@ abstract class PlotFragment(private val layoutId: Int) : Fragment() {
     protected lateinit var xSeries: SimpleXYSeries
     protected lateinit var ySeries: SimpleXYSeries
     protected lateinit var zSeries: SimpleXYSeries
-    private val resetToDefaults: () -> Unit = {
+    protected open val resetToDefaults: () -> Unit = {
         xSeries = SimpleXYSeries(arrayListOf(0), SimpleXYSeries.ArrayFormat.Y_VALS_ONLY, "X")
         ySeries = SimpleXYSeries(arrayListOf(0), SimpleXYSeries.ArrayFormat.Y_VALS_ONLY, "Y")
         zSeries = SimpleXYSeries(arrayListOf(0), SimpleXYSeries.ArrayFormat.Y_VALS_ONLY, "Z")
@@ -30,6 +30,7 @@ abstract class PlotFragment(private val layoutId: Int) : Fragment() {
     var firstTimestamp: Long = 0
 
     abstract val imuCallback: (ImuPacket) -> Unit
+    open val hallCallback: (Double) -> Unit = {}
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,6 +40,7 @@ abstract class PlotFragment(private val layoutId: Int) : Fragment() {
         ySeries = SimpleXYSeries(arrayListOf(0), SimpleXYSeries.ArrayFormat.Y_VALS_ONLY, "Y")
         zSeries = SimpleXYSeries(arrayListOf(0), SimpleXYSeries.ArrayFormat.Y_VALS_ONLY, "Z")
         mainActivity.registerImuCallback(imuCallback)
+        mainActivity.registerHallCallback(hallCallback)
     }
 
     override fun onCreateView(
@@ -60,6 +62,7 @@ abstract class PlotFragment(private val layoutId: Int) : Fragment() {
     override fun onDestroy() {
         mainActivity.unregisterDisconnectedCallback(resetToDefaults)
         mainActivity.unregisterImuCallback(imuCallback)
+        mainActivity.unregisterHallCallback(hallCallback)
         super.onDestroy()
     }
 }

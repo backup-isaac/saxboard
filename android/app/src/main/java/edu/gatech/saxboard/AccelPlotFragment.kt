@@ -15,8 +15,6 @@ class AccelPlotFragment : PlotFragment(R.layout.fragment_accelplot) {
             ySeries.removeFirst()
             zSeries.removeFirst()
         }
-        if (++i % 4 == 0) {
-            plot.redraw()
-        }
+        plot.redraw()
     }
 }

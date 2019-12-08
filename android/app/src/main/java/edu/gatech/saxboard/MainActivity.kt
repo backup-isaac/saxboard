@@ -71,6 +71,16 @@ class MainActivity : AppCompatActivity() {
         imuCallbacks.remove(callback)
     }
 
+    private var hallCallbacks = arrayListOf<(Double) -> Unit>()
+
+    fun registerHallCallback(callback: (Double) -> Unit) {
+        hallCallbacks.add(callback)
+    }
+
+    fun unregisterHallCallback(callback: (Double) -> Unit) {
+        hallCallbacks.remove(callback)
+    }
+
     fun sendCommand(command: String, data: ByteArray): Boolean {
         if (connectThread == null) {
             Log.d(TAG, "connection not exist")
@@ -103,6 +113,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var viewPagerAdapter: ViewPagerAdapter
     private lateinit var viewPager: ViewPager
 
+    var i = 0
+    private fun fakeData() {
+        for (imuCallback in imuCallbacks)  {
+            imuCallback(ImuPacket(0.01f,-0.02f,0.98f))
+        }
+        if (++i % 5 == 4) {
+            for (hallCallback in hallCallbacks) {
+                hallCallback(6.9)
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -114,7 +136,7 @@ class MainActivity : AppCompatActivity() {
         tabLayout.setupWithViewPager(viewPager)
         val searchButton = findViewById<Button>(R.id.searchButton)
         searchButton.setOnClickListener {
-//             for (imuCallback in imuCallbacks) imuCallback(ImuPacket(0.01f,-0.02f,0.98f)) // uncomment this for testing plots on emulator
+            // fakeData() // uncomment this for testing plots on emulator
             if (bluetoothAdapter == null) {
                 Log.d(TAG, "bluetooth not exist")
             } else if (skateboard == null) {
@@ -171,9 +193,11 @@ class MainActivity : AppCompatActivity() {
     companion object {
         const val REQUEST_ENABLE_BT = 1
         const val SKATEBOARD_NAME = "ESP32test"
+        const val WHEEL_RADIUS = 0.04 // meters
         const val TAG = "saxboardLogging"
         val PACKET_LENGTHS = mapOf(
             "IMU" to 12,
+            "HAL" to 2,
             "AUD" to 32
         )
     }
@@ -269,6 +293,14 @@ class MainActivity : AppCompatActivity() {
                                     audioFileCallback(audioFilePacket)
                                 }
                             }
+                            "HAL" -> {
+                                val hallPacket = parseHallPacket(packetBuffer)
+                                for (hallCallback in hallCallbacks) {
+                                    runOnUiThread {
+                                        hallCallback(hallPacket)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -329,6 +361,16 @@ class MainActivity : AppCompatActivity() {
             sb.append(ch.toChar())
         }
         return sb.toString()
+    }
+
+    fun parseHallPacket(packetBuffer: ByteArray) : Double {
+        // flip byte endianness from what the esp32 sent
+        var temp = packetBuffer[0]
+        packetBuffer[0] = packetBuffer[1]
+        packetBuffer[1] = temp
+        val wbuf = ByteBuffer.wrap(packetBuffer)
+        val ticks = wbuf.getShort(0)
+        return ticks *  2 * Math.PI * WHEEL_RADIUS
     }
 
     class ViewPagerAdapter(fm: FragmentManager) : FragmentPagerAdapter(fm, BEHAVIOR_RESUME_ONLY_CURRENT_FRAGMENT) {
