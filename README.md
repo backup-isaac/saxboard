@@ -7,7 +7,14 @@ Connect it to the Android app to control the skateboard and plot your data.
 
 ## Setup
 
-[ hardware schematic here ]
+### Key Components
+- NodeMCU-32S
+- WS2813B RGB LED strips
+- LSM9DS1 IMU
+- Hall effect sensor
+
+### Schematic
+![](https://github.gatech.edu/iweintraub3/saxboard/blob/master/schematic.png)
 
 To obtain the code for both the skateboard and Android app, clone this repository.
 
