@@ -24,3 +24,25 @@ macOS users may need to install a USB to UART driver from https://www.silabs.com
 Open the `android/` project directory in Android Studio. Then build the application and install it onto an Android device.
 The app requires a minimum API level of 21 (Lollipop, version 5.0), although it targets and has been tested on API level 27 (Oreo, version 8.1).
 Building it also requires Kotlin version `1.3.50`.
+
+## Usage
+1. Turn on the skateboard by inserting the batteries.
+2. Press the "Search" button to search for and pair with the skateboard. This has no effect if your phone is already paired with the skateboard.
+3. Press the "Connect" button to connect to the skateboard. At this point you may use any part of the app.
+4. The "Disconnect" button will disconnect you from the skateboard.
+
+## Features
+Switch between tabs of the app by swiping or tapping on the labels at the top of the screen.
+![](https://github.gatech.edu/iweintraub3/saxboard/blob/master/control.png)
+
+- The skateboard has two sets of RGB LED strips. For each LED strip, tap the colored rectangle to bring up a color picker that you can use to select the desired color. Press "Set Color" to set the color. The "Enable"/"Disable" button does what it says.
+- (WIP) The skateboard has installed speakers that will be able to play songs off of an SD card. Once you connect to the skateboard, the drop-down menu will be populated with the songs that the SD card contains. Press the "Play"/"Stop" button to perform the corresponding action. There is also a volume adjustment slider.
+
+![](https://github.gatech.edu/iweintraub3/saxboard/blob/master/acceleration.png)
+
+- The skateboard contains an accelerometer that automatically transmits data to the app, which plots it over time. 
+
+![](https://github.gatech.edu/iweintraub3/saxboard/blob/master/distance.png)
+
+- The skateboard also has a Hall effect sensor measuring wheel rotation. This measurement is combined with accelerometer data to show distance travelled.
+
