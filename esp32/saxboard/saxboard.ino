@@ -7,10 +7,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
-#include "SPIFFS.h"
-#include "AudioFileSourceSPIFFS.h"
-#include "AudioGeneratorMP3.h"
-#include "AudioOutputI2S.h"
 #include "FastLED.h"
 
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
@@ -345,46 +341,24 @@ void ledThread(void *args) {
 
 void audioThread(void *args) {
   // initialize audio
-  SPIFFS.begin();
-  AudioGeneratorMP3 *mp3;
-  AudioFileSourceSPIFFS *file;
-  AudioOutputI2S *out;
-  
-  out = new AudioOutputI2S(0,1);
-  mp3 = new AudioGeneratorMP3();
   for (;;) {
-    if (mp3->isRunning()) {
-      if (!mp3->loop()) mp3->stop(); 
-    }
     audio_command cmd;
     if (xQueueReceive(audioCommandQueue, &cmd, 0)) {
       if (cmd.flags & 1) {
         // start playing
-        if (mp3->isRunning()) {
-          mp3->stop();
-        }
-        file = new AudioFileSourceSPIFFS(cmd.song);
-        mp3->begin(file, out);
       } else if (cmd.flags & 2) {
         // stop playing
-        if (mp3->isRunning()) {
-          mp3->stop();
-        }
       } else if (cmd.flags & 4) {
         // list songs
-        File root = SPIFFS.open("/");
-        File file = root.openNextFile();
-        while(file) {
-          char songNameBuf[37];
-          sprintf(songNameBuf, "!AUD%s", file.name());
-          char *sn = songNameBuf;
-          tx_packet pkt = (tx_packet) {
-            .len = 36,
-            .str = sn,
-          };
-          xQueueSend(btSendQueue, &pkt, 40);
-          file = root.openNextFile();
-        }
+        // for each file:
+//          char songNameBuf[37];
+//          sprintf(songNameBuf, "!AUD%s", file.name());
+//          char *sn = songNameBuf;
+//          tx_packet pkt = (tx_packet) {
+//            .len = 36,
+//            .str = sn,
+//          };
+//          xQueueSend(btSendQueue, &pkt, 40);
       }
     }
   }
@@ -392,8 +366,44 @@ void audioThread(void *args) {
 
 volatile uint8_t hallTickCounter = 0;
 
-void IRAM_ATTR hallISR() {
-  hallTickCounter++;
+typedef enum {
+  START,
+  LEVEL_LOW,
+  RISEN,
+  LEVEL_HIGH,
+  FALLEN,
+} hall_state;
+
+hall_state state = FALLEN;
+  
+void IRAM_ATTR hallISRRising() {
+  state = RISEN;
+}
+
+void IRAM_ATTR hallISRFalling() {
+  state = FALLEN;
+}
+
+uint8_t hallTicks = 0;
+int inum = digitalPinToInterrupt(32);
+
+void hallThread(void *args) {
+  while (true) {
+    switch (state) {
+      case RISEN:
+        detachInterrupt(inum);
+        attachInterrupt(inum, hallISRFalling, FALLING);
+        state = LEVEL_HIGH;
+        break;
+      case FALLEN:
+        detachInterrupt(inum);
+        attachInterrupt(inum, hallISRRising, RISING);
+        hallTicks++;
+        break;
+      default:
+        break;
+    }
+  }
 }
 
 void setup() {
@@ -409,7 +419,8 @@ void setup() {
   xTaskCreate(&ledThread, "LED", STACK_DEPTH, NULL, tskIDLE_PRIORITY, &ledHandle);
   TaskHandle_t audioHandle = NULL;
   xTaskCreate(&audioThread, "AUDIO", STACK_DEPTH, NULL, tskIDLE_PRIORITY, &audioHandle);
-  attachInterrupt(32, hallISR, CHANGE);
+  TaskHandle_t hallHandle = NULL;
+  xTaskCreate(&hallThread, "HALL", STACK_DEPTH, NULL, tskIDLE_PRIORITY, &hallHandle);
 }
 
 uint32_t i = 0;
@@ -417,8 +428,8 @@ uint32_t i = 0;
 void loop() {
   sendImuTelemetry();
   if (i++ % 4 == 0) {
-    sendHallTelemetry(hallTickCounter);
-    hallTickCounter = 0;
+    sendHallTelemetry(hallTicks);
+    hallTicks = 0;
   }
   delay(1000);
 } 
