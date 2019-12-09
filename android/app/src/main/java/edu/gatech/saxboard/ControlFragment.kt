@@ -2,6 +2,7 @@ package edu.gatech.saxboard
 
 import android.graphics.Color
 import android.os.Bundle
+import android.util.Log
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
@@ -165,7 +166,7 @@ class ControlFragment : Fragment() {
         songsAdapter = ArrayAdapter<String>(
             view.context,
             android.R.layout.simple_spinner_item,
-            arrayOf(DEFAULT_SELECTION)
+            arrayListOf(DEFAULT_SELECTION)
         ).also {
             it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
             songSpinner.adapter = it
@@ -204,7 +205,7 @@ class ControlFragment : Fragment() {
     }
 
     private fun sendLedEnableCommand(isRightLed: Boolean, isEnable: Boolean): Boolean {
-        val command = "L" + if (isEnable) "E" else "D" + if (isRightLed) "R" else "L"
+        val command = "L" + (if (isEnable) "E" else "D") + (if (isRightLed) "R" else "L")
         return mainActivity.sendCommand(command, ByteArray(0))
     }
 

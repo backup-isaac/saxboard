@@ -91,10 +91,16 @@ class MainActivity : AppCompatActivity() {
             Log.w(TAG, "Invalid command $command")
             return false
         }
-        if (!connectThread!!.write("!$command".toByteArray(Charsets.US_ASCII))) {
-            return false
+        val preamble = "!$command".toByteArray(Charsets.US_ASCII)
+        val beeg = ByteArray(preamble.size + data.size) {
+            if (it < preamble.size) {
+                preamble[it]
+            } else {
+                data[it - preamble.size]
+            }
         }
-        return connectThread!!.write(data)
+        Log.d(TAG, "Sending ${beeg.toString(Charsets.US_ASCII)}")
+        return connectThread!!.write(beeg)
     }
 
     private val receiver = object : BroadcastReceiver() {
@@ -202,7 +208,7 @@ class MainActivity : AppCompatActivity() {
         const val TAG = "saxboardLogging"
         val PACKET_LENGTHS = mapOf(
             "IMU" to 12,
-            "HAL" to 2,
+            "HAL" to 1,
             "AUD" to 32
         )
     }
@@ -243,8 +249,8 @@ class MainActivity : AppCompatActivity() {
                         }
                         break
                     }
-                    Log.d(TAG, "Received $numBytes bytes")
                     for (i in 0 until numBytes) {
+                        Log.d(TAG, "Parser state $parserState, character ${readBuffer[i]}")
                         if (parserState == ParserState.Waiting) {
                             if (readBuffer[i] == '!'.toByte()) {
                                 parserState = ParserState.PacketBegun
@@ -316,10 +322,10 @@ class MainActivity : AppCompatActivity() {
         fun write(bytes: ByteArray): Boolean {
             return try {
                 outStream?.write(bytes)
-                false
+                true
             } catch (e: IOException) {
                 Log.e(TAG, "Error occurred when sending data", e)
-                true
+                false
             }
         }
 

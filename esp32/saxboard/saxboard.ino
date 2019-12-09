@@ -7,6 +7,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include "SPIFFS.h"
+#include "AudioFileSourceSPIFFS.h"
+#include "AudioGeneratorMP3.h"
+#include "AudioOutputI2S.h"
+#include "FastLED.h"
 
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
 #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
@@ -15,9 +20,7 @@
 #define STACK_DEPTH 4096 
 #define BUF_SIZE 64
 
-//SemaphoreHandle_t btRecvSemaphore = NULL;
 uint8_t btReceiveBuf[BUF_SIZE];
-//bool btAvailable = false;
 
 QueueHandle_t btSendQueue;
 QueueHandle_t ledCmdQueue;
@@ -39,7 +42,6 @@ typedef enum {
   RIGHT_LED_ENABLE,
   PLAY_SONG,
   STOP_SONG,
-  VOLUME,
   DIR_LISTING,
 } packet_type;
 
@@ -51,10 +53,14 @@ typedef struct {
 } led_command;
 
 typedef struct {
-  uint8_t flags; // bit 0 set -> play command; bit 1 set -> stop command; bit 2 set -> volume command; bit 3 set -> directory list command
-  uint8_t volume; // only inspect volume if bit 2 set
+  uint8_t flags; // bit 0 set -> play command; bit 1 set -> stop command; bit 2 set -> directory list command
   char *song; // only inspect song if bit 0 set
 } audio_command;
+
+typedef struct {
+  uint8_t len;
+  char *str;
+} tx_packet;
 
 void bluetoothThread(void *args) {
   char packetId[4];
@@ -71,19 +77,9 @@ void bluetoothThread(void *args) {
   bt.begin("ESP32test");
   Serial.println("The device started, now you can pair it with bluetooth!");
   for (;;) {
-//    if (bt.available() && !btAvailable) {
-//      uint8_t index = 0;
-//      if (xSemaphoreTake(btRecvSemaphore, 10)) {
-//        while (bt.available() && index < BUF_SIZE - 1) {
-//          btReceiveBuf[index++] = bt.read();
-//        }
-//        btReceiveBuf[index] = 0;
-//        btAvailable = true;
-//        xSemaphoreGive(btRecvSemaphore);
-//      }
-//    }
     while (bt.available()) {
       uint8_t recv = bt.read();
+      Serial.printf("Received 0x%x, state %d\n", recv, ps);
       if (ps == WAITING) {
         if (recv == '!') {
           ps = PACKET_BEGUN;
@@ -145,32 +141,33 @@ void bluetoothThread(void *args) {
                 packetLength = 0;
               }
               break;
-            case 'V':
-              if (packetId[1] == 'O' && packetId[2] == 'L') {
-                pt = VOLUME;
-                packetLength = 1;
-              }
-              break;
             default:
               break;
           }
+          Serial.printf("Packet ID %s, type %d\n", packetId, pt);
           if (pt == UNRECOGNIZED) {
             ps = WAITING;
           } else {
             ps = ID_RECEIVED;
             packetBufferIdx = 0;
           }
+          if (packetBufferIdx >= packetLength) {
+            packetReady = true;
+            ps = WAITING;
+            break;
+          }
         }
       } else if (ps == ID_RECEIVED) {
+        packetBuffer[packetBufferIdx++] = recv;
         if (packetBufferIdx >= packetLength) {
           packetReady = true;
           ps = WAITING;
           break;
-        } else if (packetBufferIdx >= 32) {
+        } 
+        if (packetBufferIdx >= 32) {
           // invalid packet length
           ps = WAITING;
         }
-        packetBuffer[packetBufferIdx++] = recv;
       }
     }
     if (packetReady) {
@@ -218,24 +215,20 @@ void bluetoothThread(void *args) {
           acmd.flags = 2;
           xQueueSend(audioCommandQueue, &acmd, 20);
           break; 
-        case VOLUME:
-          acmd.flags = 4;
-          acmd.volume = packetBuffer[0];
-          xQueueSend(audioCommandQueue, &acmd, 20);
-          break; 
         case DIR_LISTING:
-          acmd.flags = 8;
+          acmd.flags = 4;
           xQueueSend(audioCommandQueue, &acmd, 20);
           break;    
         default:
           break;
       }
     }
-    char *toSend;
-    if (xQueueReceive(btSendQueue, &toSend, 10)) {
-      while (*toSend) {
-        bt.write(*toSend);
-        toSend++;
+    tx_packet toSend;
+    int idx = 0;
+    boolean cont = false;
+    if (xQueueReceive(btSendQueue, &toSend, 0)) {
+      while (idx < toSend.len) {
+        bt.write(toSend.str[idx++]);
       }
     }
   }
@@ -255,7 +248,11 @@ char imuBuf[17];
 void sendImuTelemetry() {
   sprintf(imuBuf, "!IMU%s", imu_telemetry.bytes);
   char *ts = imuBuf;
-  xQueueSend(btSendQueue, &ts, 0);
+  tx_packet pkt = (tx_packet) {
+    .len = 16,
+    .str = ts,
+  };
+  xQueueSend(btSendQueue, &pkt, 0);
 }
 
 char hallBuf[6];
@@ -263,7 +260,11 @@ char hallBuf[6];
 void sendHallTelemetry(uint8_t ticks) {
   sprintf(hallBuf, "!HAL%s", &ticks);
   char *ts = hallBuf;
-  xQueueSend(btSendQueue, &ts, 0);
+  tx_packet pkt = (tx_packet) {
+    .len = 5,
+    .str = ts,
+  };
+  xQueueSend(btSendQueue, &pkt, 0);
 }
 
 void imuThread(void *args) {
@@ -289,17 +290,54 @@ void imuThread(void *args) {
   }
 }
 
+#define NUM_LEDS 35
+
+void writeLed(CRGB *leds, uint8_t r, uint8_t g, uint8_t b) {
+  for (uint8_t i = 0; i < 35; i++) {
+    leds[i].r = r;
+    leds[i].g = g;
+    leds[i].b = b;
+  }
+  FastLED.show();
+}
+
 void ledThread(void *args) {
+  CRGB leftLeds[NUM_LEDS];
+  CRGB rightLeds[NUM_LEDS];
+  FastLED.addLeds<NEOPIXEL, 25>(leftLeds, NUM_LEDS);
+  FastLED.addLeds<NEOPIXEL, 23>(rightLeds, NUM_LEDS);
   // initialize LEDs
+  uint8_t leftR = 0, leftG = 0, leftB = 0, rightR = 0, rightG = 0, rightB = 0;
   for (;;) {
     led_command cmd;
     if (xQueueReceive(ledCmdQueue, &cmd, 20)) {
       if (cmd.flags & 2) {
         // disable LED
+        if (cmd.flags & 1) {
+          writeLed(rightLeds, 0, 0, 0);
+        } else {
+          writeLed(leftLeds, 0, 0, 0);
+        }
       } else if (cmd.flags & 4) {
         // enable LED
+        if (cmd.flags & 1) {
+          writeLed(rightLeds, rightR, rightG, rightB); 
+        } else {
+          writeLed(leftLeds, leftR, leftG, leftB);
+        }
       } else if (cmd.flags & 8) {
         // update color
+        if (cmd.flags & 1) {
+          rightR = cmd.red;
+          rightG = cmd.green;
+          rightB = cmd.blue;
+          writeLed(rightLeds, rightR, rightG, rightB); 
+        } else {
+          leftR = cmd.red;
+          leftG = cmd.green;
+          leftB = cmd.blue;
+          writeLed(leftLeds, leftR, leftG, leftB);
+        }
       }
     }
   }
@@ -307,32 +345,60 @@ void ledThread(void *args) {
 
 void audioThread(void *args) {
   // initialize audio
+  SPIFFS.begin();
+  AudioGeneratorMP3 *mp3;
+  AudioFileSourceSPIFFS *file;
+  AudioOutputI2S *out;
+  
+  out = new AudioOutputI2S(0,1);
+  mp3 = new AudioGeneratorMP3();
   for (;;) {
+    if (mp3->isRunning()) {
+      if (!mp3->loop()) mp3->stop(); 
+    }
     audio_command cmd;
-    if (xQueueReceive(audioCommandQueue, &cmd, 20)) {
+    if (xQueueReceive(audioCommandQueue, &cmd, 0)) {
       if (cmd.flags & 1) {
         // start playing
+        if (mp3->isRunning()) {
+          mp3->stop();
+        }
+        file = new AudioFileSourceSPIFFS(cmd.song);
+        mp3->begin(file, out);
       } else if (cmd.flags & 2) {
         // stop playing
+        if (mp3->isRunning()) {
+          mp3->stop();
+        }
       } else if (cmd.flags & 4) {
-        // change volume
-      } else if (cmd.flags & 8) {
         // list songs
-        // for each song on the sd card:
-        // char songNameBuf[37];
-        // sprintf(songNameBuf, "!AUD%s", <name of song>);
-        // char *sn = songNameBuf;
-        // xQueueSend(btSendQueue, &sn, 40);
+        File root = SPIFFS.open("/");
+        File file = root.openNextFile();
+        while(file) {
+          char songNameBuf[37];
+          sprintf(songNameBuf, "!AUD%s", file.name());
+          char *sn = songNameBuf;
+          tx_packet pkt = (tx_packet) {
+            .len = 36,
+            .str = sn,
+          };
+          xQueueSend(btSendQueue, &pkt, 40);
+          file = root.openNextFile();
+        }
       }
     }
   }
 }
 
+volatile uint8_t hallTickCounter = 0;
+
+void IRAM_ATTR hallISR() {
+  hallTickCounter++;
+}
+
 void setup() {
   Serial.begin(115200);
-//  btRecvSemaphore = xSemaphoreCreateBinary(); 
-//  xSemaphoreGive(btRecvSemaphore);
-  btSendQueue = xQueueCreate(12, sizeof(char *));
+  btSendQueue = xQueueCreate(12, sizeof(tx_packet));
   ledCmdQueue = xQueueCreate(8, sizeof(led_command));
   audioCommandQueue = xQueueCreate(8, sizeof(audio_command));
   TaskHandle_t bluetoothHandle = NULL;
@@ -343,21 +409,16 @@ void setup() {
   xTaskCreate(&ledThread, "LED", STACK_DEPTH, NULL, tskIDLE_PRIORITY, &ledHandle);
   TaskHandle_t audioHandle = NULL;
   xTaskCreate(&audioThread, "AUDIO", STACK_DEPTH, NULL, tskIDLE_PRIORITY, &audioHandle);
+  attachInterrupt(32, hallISR, CHANGE);
 }
 
 uint32_t i = 0;
 
 void loop() {
-//  if (btAvailable) {
-//    xSemaphoreTake(btRecvSemaphore, portMAX_DELAY);
-//    Serial.printf("Bluetooth received: %s\n", btReceiveBuf);
-//    btAvailable = false;
-//    xSemaphoreGive(btRecvSemaphore);
-//  }
   sendImuTelemetry();
-  if (i % 4 == 0) {
-    // TODO replace 0 with tick counter
-    sendHallTelemetry(0);
+  if (i++ % 4 == 0) {
+    sendHallTelemetry(hallTickCounter);
+    hallTickCounter = 0;
   }
   delay(1000);
 } 
