@@ -290,9 +290,9 @@ void imuThread(void *args) {
 
 void writeLed(CRGB *leds, uint8_t r, uint8_t g, uint8_t b) {
   for (uint8_t i = 0; i < 35; i++) {
-    leds[i].r = r / 4;
-    leds[i].g = g / 4;
-    leds[i].b = b / 4;
+    leds[i].r = r / 8;
+    leds[i].g = g / 8;
+    leds[i].b = b / 8;
   }
   FastLED.show();
 }
