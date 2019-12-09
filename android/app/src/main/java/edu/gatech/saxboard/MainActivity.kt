@@ -24,6 +24,7 @@ import java.io.OutputStream
 import java.nio.ByteBuffer
 
 class MainActivity : AppCompatActivity() {
+    private var receiverRegistered = false
     private var bluetoothAdapter: BluetoothAdapter? = null
     private var skateboard: BluetoothDevice? = null
     private var connectThread: ConnectThread? = null
@@ -176,6 +177,7 @@ class MainActivity : AppCompatActivity() {
         }
         val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
         registerReceiver(receiver, filter)
+        receiverRegistered = true
         val pairedDevices: Set<BluetoothDevice>? = bluetoothAdapter?.bondedDevices
         pairedDevices?.forEach { device ->
             if (device.name == SKATEBOARD_NAME) {
@@ -186,7 +188,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        unregisterReceiver(receiver)
+        if (receiverRegistered) {
+            receiverRegistered = false
+            unregisterReceiver(receiver)
+        }
         super.onDestroy()
     }
 
