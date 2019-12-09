@@ -86,6 +86,14 @@ class ControlFragment : Fragment() {
         val leftColorSelectButton = view.findViewById<Button>(R.id.leftColorSetButton)
         leftColorSelectButton.setOnClickListener {
             sendLedColorCommand(false, leftRgb[0], leftRgb[1], leftRgb[2])
+            if (!leftLedsEnabled && sendLedEnableCommand(false, !leftLedsEnabled)) {
+                leftLedsEnabled = !leftLedsEnabled
+                leftLedEnableButton.text = if (leftLedsEnabled) {
+                    "Disable"
+                } else {
+                    "Enable"
+                }
+            }
         }
         leftLedEnableButton = view.findViewById(R.id.leftLedEnableButton)
         leftLedEnableButton.setOnClickListener {
@@ -119,6 +127,14 @@ class ControlFragment : Fragment() {
         val rightColorSelectButton = view.findViewById<Button>(R.id.rightColorSetButton)
         rightColorSelectButton.setOnClickListener {
             sendLedColorCommand(true, rightRgb[0], rightRgb[1], rightRgb[2])
+            if (!rightLedsEnabled && sendLedEnableCommand(true, !rightLedsEnabled)) {
+                rightLedsEnabled = !rightLedsEnabled
+                rightLedEnableButton.text = if (rightLedsEnabled) {
+                    "Disable"
+                } else {
+                    "Enable"
+                }
+            }
         }
         rightLedEnableButton = view.findViewById(R.id.rightLedEnableButton)
         rightLedEnableButton.setOnClickListener {

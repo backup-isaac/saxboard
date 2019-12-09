@@ -14,6 +14,7 @@ import android.util.Log
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
+import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentPagerAdapter
@@ -32,12 +33,17 @@ class MainActivity : AppCompatActivity() {
 
     private var disconnectedCallbacks = arrayListOf<() -> Unit>()
 
+    private fun connectFailedCallback() {
+        Toast.makeText(applicationContext, "Failed to connect", Toast.LENGTH_LONG).show()
+    }
+
     private fun connectedCallback() {
         connectButton.isEnabled = false
         sendCommand("DIR", ByteArray(0))
     }
 
     private fun disconnectedCallback() {
+        Toast.makeText(applicationContext, "Disconnected", Toast.LENGTH_LONG).show()
         connectButton.isEnabled = true
         for (callback in disconnectedCallbacks) {
             callback()
@@ -225,7 +231,14 @@ class MainActivity : AppCompatActivity() {
         override fun run() {
             bluetoothAdapter!!.cancelDiscovery()
             socket?.use { socket ->
-                socket.connect()
+                try {
+                    socket.connect()
+                } catch (exc: IOException) {
+                    runOnUiThread {
+                        connectFailedCallback()
+                    }
+                    return
+                }
                 outStream = socket.outputStream
                 var numBytes: Int
                 Log.d(TAG, "Connected")

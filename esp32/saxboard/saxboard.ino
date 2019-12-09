@@ -221,7 +221,6 @@ void bluetoothThread(void *args) {
     }
     tx_packet toSend;
     int idx = 0;
-    boolean cont = false;
     if (xQueueReceive(btSendQueue, &toSend, 0)) {
       while (idx < toSend.len) {
         bt.write(toSend.str[idx++]);
@@ -290,9 +289,9 @@ void imuThread(void *args) {
 
 void writeLed(CRGB *leds, uint8_t r, uint8_t g, uint8_t b) {
   for (uint8_t i = 0; i < 35; i++) {
-    leds[i].r = r;
-    leds[i].g = g;
-    leds[i].b = b;
+    leds[i].r = r / 4;
+    leds[i].g = g / 4;
+    leds[i].b = b / 4;
   }
   FastLED.show();
 }
@@ -300,10 +299,13 @@ void writeLed(CRGB *leds, uint8_t r, uint8_t g, uint8_t b) {
 void ledThread(void *args) {
   CRGB leftLeds[NUM_LEDS];
   CRGB rightLeds[NUM_LEDS];
-  FastLED.addLeds<NEOPIXEL, 25>(leftLeds, NUM_LEDS);
+  FastLED.addLeds<NEOPIXEL, 27>(leftLeds, NUM_LEDS);
   FastLED.addLeds<NEOPIXEL, 23>(rightLeds, NUM_LEDS);
+  FastLED.setMaxPowerInMilliWatts(5000);
   // initialize LEDs
   uint8_t leftR = 0, leftG = 0, leftB = 0, rightR = 0, rightG = 0, rightB = 0;
+  writeLed(rightLeds, 0, 0, 0);
+  writeLed(leftLeds, 0, 0, 0);
   for (;;) {
     led_command cmd;
     if (xQueueReceive(ledCmdQueue, &cmd, 20)) {
