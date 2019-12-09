@@ -385,7 +385,6 @@ volatile uint8_t hallTickCounter = 0;
 //}
 //
 void hallISRFalling() {
-  Serial.println("Falling edge");
   hallTickCounter++;
 }
 //
@@ -434,15 +433,10 @@ void setup() {
   pinMode(3, INPUT);
   attachInterrupt(digitalPinToInterrupt(3), hallISRFalling, FALLING);
 }
-
-uint32_t i = 0;
-
 void loop() {
   sendImuTelemetry();
   delay(500);
-  if (i++ % 4 == 0) {
-    sendHallTelemetry(hallTickCounter);
-    hallTickCounter = 0;
-  }
+  sendHallTelemetry(hallTickCounter);
+  hallTickCounter = 0;
   delay(500);
 } 
