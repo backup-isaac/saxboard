@@ -1,4 +1,5 @@
-# saxboard - Isaac Weintraub, Matt Zilvetti
+# saxboard
+#### Isaac Weintraub, Matt Zilvetti
 
 Trick out your skateboard! Our project embeds an ESP32 onto a skateboard to provide PWM control of lights for underglow
 as well as an accelerometer and distance measurements.
