@@ -20,7 +20,7 @@ and then copy each of them into your Arduino libraries directory, for instance `
 To program the board, simply open the `esp32/saxboard` sketch, connect to the NodeMCU-32S via USB, and flash.
 macOS users may need to install a USB to UART driver from https://www.silabs.com/products/development-tools/software/usb-to-uart-bridge-vcp-drivers.
 
-### Programming the Android App
+### Installing the Android App
 Open the `android/` project directory in Android Studio. Then build the application and install it onto an Android device.
 The app requires a minimum API level of 21 (Lollipop, version 5.0), although it targets and has been tested on API level 27 (Oreo, version 8.1).
 Building it also requires Kotlin version `1.3.50`.
