@@ -1,3 +1,12 @@
 [submodule "esp32/third_party_libraries/SparkFun_LSM9DS1_Arduino_Library"]
 	path = esp32/third_party_libraries/SparkFun_LSM9DS1_Arduino_Library
 	url = https://github.com/sparkfun/SparkFun_LSM9DS1_Arduino_Library.git
+[submodule "esp32/third_party_libraries/ESP8266Audio"]
+	path = esp32/third_party_libraries/ESP8266Audio
+	url = https://github.com/earlephilhower/ESP8266Audio
+[submodule "esp32/third_party_libraries/ESP8266_Spiram"]
+	path = esp32/third_party_libraries/ESP8266_Spiram
+	url = https://github.com/Gianbacchio/ESP8266_Spiram
+[submodule "esp32/third_party_libraries/FastLED"]
+	path = esp32/third_party_libraries/FastLED
+	url = https://github.com/FastLED/FastLED.git
