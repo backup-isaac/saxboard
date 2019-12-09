@@ -263,7 +263,6 @@ class MainActivity : AppCompatActivity() {
                         break
                     }
                     for (i in 0 until numBytes) {
-                        Log.d(TAG, "Parser state $parserState, character ${readBuffer[i]}")
                         if (parserState == ParserState.Waiting) {
                             if (readBuffer[i] == '!'.toByte()) {
                                 parserState = ParserState.PacketBegun

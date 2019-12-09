@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include "FastLED.h"
+#include <math.h>
 
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
 #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
@@ -39,13 +40,16 @@ typedef enum {
   PLAY_SONG,
   STOP_SONG,
   DIR_LISTING,
+  LEFT_LED_PATTERN,
+  RIGHT_LED_PATTERN,
 } packet_type;
 
 typedef struct {
-  uint8_t flags; // bit 0 = right led (1) or left led (0); bit 1 set -> disable command; bit 2 set -> enable command; bit 3 set -> color command
+  uint8_t flags; // bit 0 = right led (1) or left led (0); bit 1 set -> disable command; bit 2 set -> enable command; bit 3 set -> color command; bit 4 set -> pattern command
   uint8_t red; // only inspect the colors if bit 3 set
   uint8_t green;
   uint8_t blue;
+  int8_t pattern; // only inspect the pattern if bit 4 is set
 } led_command;
 
 typedef struct {
@@ -119,6 +123,15 @@ void bluetoothThread(void *args) {
                   } else if (packetId[2] == 'R') {
                     pt = RIGHT_LED_ENABLE;
                     packetLength = 0;
+                  }
+                  break;
+                case 'P':
+                  if (packetId[2] == 'L') {
+                    pt = LEFT_LED_PATTERN;
+                    packetLength = 1;
+                  } else if (packetId[2] == 'R') {
+                    pt = LEFT_LED_PATTERN;
+                    packetLength = 1;
                   }
                   break;
                 default:
@@ -215,6 +228,16 @@ void bluetoothThread(void *args) {
           acmd.flags = 4;
           xQueueSend(audioCommandQueue, &acmd, 20);
           break;    
+        case LEFT_LED_PATTERN:
+          lcmd.flags = 16;
+          lcmd.pattern = packetBuffer[0];
+          xQueueSend(ledCmdQueue, &lcmd, 20);
+          break;
+        case RIGHT_LED_PATTERN:
+          lcmd.flags = 17;
+          lcmd.pattern = packetBuffer[0];
+          xQueueSend(ledCmdQueue, &lcmd, 20);
+          break;
         default:
           break;
       }
@@ -287,12 +310,34 @@ void imuThread(void *args) {
 }
 
 #define NUM_LEDS 35
+#define PATTERN_LENGTH 96
 
-void writeLed(CRGB *leds, uint8_t r, uint8_t g, uint8_t b) {
-  for (uint8_t i = 0; i < 35; i++) {
-    leds[i].r = r / 8;
-    leds[i].g = g / 8;
-    leds[i].b = b / 8;
+void writeLedUniform(CRGB *leds, uint8_t r, uint8_t g, uint8_t b) {
+  for (uint8_t i = 0; i < NUM_LEDS; i++) {
+    leds[i].r = r / 4;
+    leds[i].g = g / 4;
+    leds[i].b = b / 4;
+  }
+  FastLED.show();
+}
+
+// material ui colors
+int colors[] = {
+  0xcd100d, // red
+  0x3f2600, // orange
+  0x3f3a0e, // yellow
+  0x33370e, // lime green
+  0x132b14, // green
+  0x002a3d, // light blue
+  0x0f142d, // indigo
+  0x2709b0, // purple
+  0x3a072c, // pink
+  0x3e3e3e, // white
+};
+
+void patternAdvance(CRGB *leds, int8_t pattern, uint8_t patternIndex) {
+  for (uint8_t i = 0; i < NUM_LEDS; i++) {
+    leds[i] = round(colors[pattern] * sinf(i + patternIndex * M_PI_4 / 3));
   }
   FastLED.show();
 }
@@ -305,24 +350,33 @@ void ledThread(void *args) {
   FastLED.setMaxPowerInMilliWatts(5000);
   // initialize LEDs
   uint8_t leftR = 0, leftG = 0, leftB = 0, rightR = 0, rightG = 0, rightB = 0;
-  writeLed(rightLeds, 0, 0, 0);
-  writeLed(leftLeds, 0, 0, 0);
+  int8_t rightPattern = -1;
+  int8_t leftPattern = -1;
+  uint8_t rightPatternIndex = 0;
+  uint8_t leftPatternIndex = 0;
+  writeLedUniform(rightLeds, 0, 0, 0);
+  writeLedUniform(leftLeds, 0, 0, 0);
   for (;;) {
     led_command cmd;
-    if (xQueueReceive(ledCmdQueue, &cmd, 20)) {
+    if (xQueueReceive(ledCmdQueue, &cmd, 0)) {
+      if (cmd.flags & 1) {
+        rightPattern = -1;
+      } else {
+        leftPattern = -1;
+      }
       if (cmd.flags & 2) {
         // disable LED
         if (cmd.flags & 1) {
-          writeLed(rightLeds, 0, 0, 0);
+          writeLedUniform(rightLeds, 0, 0, 0);
         } else {
-          writeLed(leftLeds, 0, 0, 0);
+          writeLedUniform(leftLeds, 0, 0, 0);
         }
       } else if (cmd.flags & 4) {
         // enable LED
         if (cmd.flags & 1) {
-          writeLed(rightLeds, rightR, rightG, rightB); 
+          writeLedUniform(rightLeds, rightR, rightG, rightB); 
         } else {
-          writeLed(leftLeds, leftR, leftG, leftB);
+          writeLedUniform(leftLeds, leftR, leftG, leftB);
         }
       } else if (cmd.flags & 8) {
         // update color
@@ -330,14 +384,32 @@ void ledThread(void *args) {
           rightR = cmd.red;
           rightG = cmd.green;
           rightB = cmd.blue;
-          writeLed(rightLeds, rightR, rightG, rightB); 
+          writeLedUniform(rightLeds, rightR, rightG, rightB); 
         } else {
           leftR = cmd.red;
           leftG = cmd.green;
           leftB = cmd.blue;
-          writeLed(leftLeds, leftR, leftG, leftB);
+          writeLedUniform(leftLeds, leftR, leftG, leftB);
+        }
+      } else if (cmd.flags & 16) {
+        // pattern
+        if (cmd.flags & 1) {
+          rightPattern = cmd.pattern;
+        } else {
+          leftPattern = cmd.pattern;
         }
       }
+    }
+    if (leftPattern >= 0 || rightPattern >= 0) {
+      if (rightPattern >= 0) {
+        patternAdvance(rightLeds, rightPattern, rightPatternIndex++);
+        if (rightPatternIndex >= PATTERN_LENGTH) rightPatternIndex = 0;
+      }
+      if (leftPattern >= 0) {
+        patternAdvance(leftLeds, leftPattern, leftPatternIndex++);
+        if (leftPatternIndex >= PATTERN_LENGTH) leftPatternIndex = 0;
+      }
+      delay(50);
     }
   }
 }
