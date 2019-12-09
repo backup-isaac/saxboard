@@ -210,7 +210,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         const val REQUEST_ENABLE_BT = 1
         const val SKATEBOARD_NAME = "ESP32test"
-        const val WHEEL_RADIUS = 0.04 // meters
+        const val WHEEL_RADIUS = 0.030319016659026 // meters
         const val TAG = "saxboardLogging"
         val PACKET_LENGTHS = mapOf(
             "IMU" to 12,

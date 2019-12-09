@@ -253,7 +253,8 @@ void sendImuTelemetry() {
 char hallBuf[6];
 
 void sendHallTelemetry(uint8_t ticks) {
-  sprintf(hallBuf, "!HAL%s", &ticks);
+  sprintf(hallBuf, "!HAL%c", ticks);
+  Serial.printf("hallBuf = %s, ticks = %d\n", hallBuf, ticks);
   char *ts = hallBuf;
   tx_packet pkt = (tx_packet) {
     .len = 5,
@@ -368,45 +369,52 @@ void audioThread(void *args) {
 
 volatile uint8_t hallTickCounter = 0;
 
-typedef enum {
-  START,
-  LEVEL_LOW,
-  RISEN,
-  LEVEL_HIGH,
-  FALLEN,
-} hall_state;
-
-hall_state state = FALLEN;
-  
-void IRAM_ATTR hallISRRising() {
-  state = RISEN;
+//typedef enum {
+//  START,
+//  LEVEL_HIGH,
+//  FALLEN,
+//  LEVEL_LOW,
+//  RISEN,
+//} hall_state;
+//
+//volatile hall_state state = START;
+//  
+//void IRAM_ATTR hallISRRising() {
+//  Serial.println("Rising edge");
+//  state = RISEN;
+//}
+//
+void hallISRFalling() {
+  Serial.println("Falling edge");
+  hallTickCounter++;
 }
-
-void IRAM_ATTR hallISRFalling() {
-  state = FALLEN;
-}
-
-uint8_t hallTicks = 0;
-int inum = digitalPinToInterrupt(32);
-
-void hallThread(void *args) {
-  while (true) {
-    switch (state) {
-      case RISEN:
-        detachInterrupt(inum);
-        attachInterrupt(inum, hallISRFalling, FALLING);
-        state = LEVEL_HIGH;
-        break;
-      case FALLEN:
-        detachInterrupt(inum);
-        attachInterrupt(inum, hallISRRising, RISING);
-        hallTicks++;
-        break;
-      default:
-        break;
-    }
-  }
-}
+//
+//volatile uint8_t hallTicks = 0;
+//int inum = 32;
+//
+//void hallThread(void *args) {
+//  while (true) {
+//    switch (state) {
+//      case START:
+//        attachInterrupt(inum, hallISRFalling, FALLING);
+//        state = LEVEL_HIGH;
+//        break;
+//      case RISEN:
+//        detachInterrupt(inum);
+//        attachInterrupt(inum, hallISRFalling, FALLING);
+//        state = LEVEL_HIGH;
+//        hallTicks++;
+//        break;
+//      case FALLEN:
+//        detachInterrupt(inum);
+//        attachInterrupt(inum, hallISRRising, RISING);
+//        state = LEVEL_LOW;
+//        break;
+//      default:
+//        break;
+//    }
+//  }
+//}
 
 void setup() {
   Serial.begin(115200);
@@ -421,17 +429,20 @@ void setup() {
   xTaskCreate(&ledThread, "LED", STACK_DEPTH, NULL, tskIDLE_PRIORITY, &ledHandle);
   TaskHandle_t audioHandle = NULL;
   xTaskCreate(&audioThread, "AUDIO", STACK_DEPTH, NULL, tskIDLE_PRIORITY, &audioHandle);
-  TaskHandle_t hallHandle = NULL;
-  xTaskCreate(&hallThread, "HALL", STACK_DEPTH, NULL, tskIDLE_PRIORITY, &hallHandle);
+//  TaskHandle_t hallHandle = NULL;
+//  xTaskCreate(&hallThread, "HALL", STACK_DEPTH, NULL, tskIDLE_PRIORITY, &hallHandle);
+  pinMode(3, INPUT);
+  attachInterrupt(digitalPinToInterrupt(3), hallISRFalling, FALLING);
 }
 
 uint32_t i = 0;
 
 void loop() {
   sendImuTelemetry();
+  delay(500);
   if (i++ % 4 == 0) {
-    sendHallTelemetry(hallTicks);
-    hallTicks = 0;
+    sendHallTelemetry(hallTickCounter);
+    hallTickCounter = 0;
   }
-  delay(1000);
+  delay(500);
 } 
