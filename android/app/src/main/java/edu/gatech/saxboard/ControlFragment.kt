@@ -18,9 +18,15 @@ class ControlFragment : Fragment() {
     private var rightLedsEnabled = false
     private var playingSong: String? = null
     private var queuedSong: String? = null
+    private var playingLeftPattern: Int = -1
+    private var queuedLeftPattern: Int = -1
+    private var playingRightPattern: Int = -1
+    private var queuedRightPattern: Int = -1
     private val leftRgb = arrayOf(0xff, 0xc1, 0x07)
     private val rightRgb = arrayOf(0x03, 0xa9, 0xf4)
     private lateinit var songsAdapter: ArrayAdapter<String>
+    private lateinit var leftPatternAdapter: ArrayAdapter<String>
+    private lateinit var rightPatternAdapter: ArrayAdapter<String>
     private lateinit var leftColorChooseButton: Button
     private lateinit var rightColorChooseButton: Button
     private lateinit var leftLedEnableButton: Button
@@ -47,7 +53,7 @@ class ControlFragment : Fragment() {
         volumeSlider.progress = 50
         soundPlayButton.text = "Play"
         songsAdapter.clear()
-        songsAdapter.add(DEFAULT_SELECTION)
+        songsAdapter.add(DEFAULT_SONG_SELECTION)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -182,7 +188,7 @@ class ControlFragment : Fragment() {
         songsAdapter = ArrayAdapter<String>(
             view.context,
             android.R.layout.simple_spinner_item,
-            arrayListOf(DEFAULT_SELECTION)
+            arrayListOf(DEFAULT_SONG_SELECTION)
         ).also {
             it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
             songSpinner.adapter = it
@@ -190,13 +196,107 @@ class ControlFragment : Fragment() {
         songSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 val selection = parent?.getItemAtPosition(position) as? String?
-                queuedSong = if (selection != null && selection != DEFAULT_SELECTION)  {
+                queuedSong = if (selection != null && selection != DEFAULT_SONG_SELECTION)  {
                     selection
                 } else {
                     null
                 }
                 if (queuedSong != null && queuedSong != playingSong) {
                     soundPlayButton.text = "Play"
+                }
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+        val leftPatternButton = view.findViewById<Button>(R.id.leftLedPatternButton)
+        leftPatternButton.setOnClickListener {
+            if (queuedLeftPattern == -1 && playingLeftPattern == -1) {
+                return@setOnClickListener
+            }
+            if (playingLeftPattern != -1 && (queuedLeftPattern == -1 || queuedLeftPattern == playingLeftPattern)) {
+                if (sendLedEnableCommand(false, false)) {
+                    playingLeftPattern = -1
+                    leftPatternButton.text = "PATTERN ON"
+                }
+            } else {
+                if (sendLedPatternCommand(false, queuedLeftPattern)) {
+                    playingLeftPattern = queuedLeftPattern
+                    leftPatternButton.text = "PATTERN OFF"
+                }
+            }
+        }
+        val leftPatternSpinner = view.findViewById<Spinner>(R.id.leftPatternSpinner)
+        leftPatternAdapter = ArrayAdapter<String>(
+            view.context,
+            android.R.layout.simple_spinner_item,
+            Array(11) {
+                if (it == 0) {
+                    DEFAULT_PATTERN_SELECTION
+                } else {
+                    "Pattern ${it - 1}"
+                }
+            }
+        ).also {
+            it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            leftPatternSpinner.adapter = it
+        }
+        leftPatternSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val selection = parent?.getItemAtPosition(position) as? String?
+                queuedLeftPattern = if (selection != null && selection != DEFAULT_PATTERN_SELECTION)  {
+                    selection.last() - '0'
+                } else {
+                    -1
+                }
+                if (queuedLeftPattern != -1 && queuedLeftPattern != playingLeftPattern) {
+                    leftPatternButton.text = "PATTERN ON"
+                }
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+        val rightPatternButton = view.findViewById<Button>(R.id.rightLedPatternButton)
+        rightPatternButton.setOnClickListener {
+            if (queuedRightPattern == -1 && playingRightPattern == -1) {
+                return@setOnClickListener
+            }
+            if (playingRightPattern != -1 && (queuedRightPattern == -1 || queuedRightPattern == playingRightPattern)) {
+                if (sendLedEnableCommand(true, false)) {
+                    playingRightPattern = -1
+                    rightPatternButton.text = "PATTERN ON"
+                }
+            } else {
+                if (sendLedPatternCommand(true, queuedRightPattern)) {
+                    playingRightPattern = queuedRightPattern
+                    rightPatternButton.text = "PATTERN OFF"
+                }
+            }
+        }
+        val rightPatternSpinner = view.findViewById<Spinner>(R.id.rightPatternSpinner)
+        rightPatternAdapter = ArrayAdapter<String>(
+            view.context,
+            android.R.layout.simple_spinner_item,
+            Array(11) {
+                if (it == 0) {
+                    DEFAULT_PATTERN_SELECTION
+                } else {
+                    "Pattern ${it - 1}"
+                }
+            }
+        ).also {
+            it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            rightPatternSpinner.adapter = it
+        }
+        rightPatternSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val selection = parent?.getItemAtPosition(position) as? String?
+                queuedRightPattern = if (selection != null && selection != DEFAULT_PATTERN_SELECTION)  {
+                    selection.last() - '0'
+                } else {
+                    -1
+                }
+                if (queuedRightPattern != -1 && queuedRightPattern != playingRightPattern) {
+                    rightPatternButton.text = "PATTERN ON"
                 }
             }
 
@@ -225,6 +325,15 @@ class ControlFragment : Fragment() {
         return mainActivity.sendCommand(command, ByteArray(0))
     }
 
+    private fun sendLedPatternCommand(isRightLed: Boolean, pattern: Int): Boolean {
+        if (pattern > 9) {
+            Log.w(TAG, "Invalid pattern $pattern")
+            return false
+        }
+        val command = "LP" + if (isRightLed) "R" else "L"
+        return mainActivity.sendCommand(command, byteArrayOf(pattern.toByte()))
+    }
+
     private fun sendPlaySongCommand(song: String): Boolean {
         return mainActivity.sendCommand("PLS", song.toByteArray(US_ASCII))
     }
@@ -240,6 +349,7 @@ class ControlFragment : Fragment() {
 
     companion object {
         const val TAG = "saxboardControlFragment"
-        const val DEFAULT_SELECTION = "Select a song..."
+        const val DEFAULT_SONG_SELECTION = "Select a song..."
+        const val DEFAULT_PATTERN_SELECTION = "Select a pattern..."
     }
 }
